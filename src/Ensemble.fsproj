@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>6.0</LangVersion>
+    <RootNamespace>Ensemble</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Requests.fs" />
+    <Compile Include="Mailbox.fs" />
+    <Compile Include="Channels.fs" />
+    <Compile Include="Actors.fs" />
+    <Compile Include="Routing.fs" />
+    <Compile Include="Groups.fs" />
+    <Compile Include="Topics.fs" />
+  </ItemGroup>
+</Project>
