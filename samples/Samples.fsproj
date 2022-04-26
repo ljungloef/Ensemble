@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>6.0</LangVersion>
+    <RootNamespace>Ensemble.Samples</RootNamespace>
+    <AssemblyName>Ensemble.Samples</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Sample1.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\src\Ensemble.fsproj" />
+  </ItemGroup>
+</Project>
