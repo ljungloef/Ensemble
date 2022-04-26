@@ -351,7 +351,7 @@ module ActorGroup =
     BoundedChannelOptions(size, SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait)
     |> ChannelMailbox.fromOpts
 
-  /// Raise the event `e'
+  /// Raise the event `e`
   let inline raiseEvent (events: Event<_>) e = e |> events.Trigger
 
   /// Raise the group event `e`
@@ -551,7 +551,7 @@ module ActorGroups =
       return (valueA, valueB)
     }
 
-  /// Run the two group actors `a` and `b'. If both succeeds, map their results using `f`.
+  /// Run the two group actors `a` and `b`. If both succeeds, map their results using `f`.
   let inline run2 (a: GroupActor<_, _, _>) (b: GroupActor<_, _, _>) ([<InlineIfLambda>] f) : GroupActor<_, _, _> =
     fun ctx ->
       task {
@@ -568,15 +568,15 @@ module ActorGroups =
           | Error e1, Error e2 -> Error $"Actor 'a' and 'b' failed with the errors '%s{e1}' and %s{e2}"
       }
 
-  /// Run the two group actors `a` and `b'. Keep the result from both actors, and combine them in a tuple.
+  /// Run the two group actors `a` and `b`. Keep the result from both actors, and combine them in a tuple.
   let inline (<.>) (a: GroupActor<_, _, _>) (b: GroupActor<_, _, _>) : GroupActor<_, _, _> =
     run2 a b (fun resA resB -> (resA, resB))
 
-  /// Run the two group actors `a` and `b'. Keep the result from only `b`.
+  /// Run the two group actors `a` and `b`. Keep the result from only `b`.
   let inline (.>) (a: GroupActor<_, _, _>) (b: GroupActor<_, _, _>) : GroupActor<_, _, _> =
     run2 a b (fun _ resB -> resB)
 
-  /// Run the two group actors `a` and `b'. Keep the result from only `a`.
+  /// Run the two group actors `a` and `b`. Keep the result from only `a`.
   let inline (<.) (a: GroupActor<_, _, _>) (b: GroupActor<_, _, _>) : GroupActor<_, _, _> =
     run2 a b (fun resA _ -> resA)
 

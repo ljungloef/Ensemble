@@ -125,7 +125,6 @@ type ActorBenchmark() =
   let increment = fun state (Increment i) -> state + i
 
   let mutable counter = 0
-  // let cts = new CancellationTokenSource(TimeSpan.FromMinutes(1))
 
   let logResult ctx result =
     if counter = 0 then
