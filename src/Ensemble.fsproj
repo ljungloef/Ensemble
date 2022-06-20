@@ -5,6 +5,7 @@
     <RootNamespace>Ensemble</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Requests.fs" />
     <Compile Include="Mailbox.fs" />
@@ -13,5 +14,9 @@
     <Compile Include="Routing.fs" />
     <Compile Include="Groups.fs" />
     <Compile Include="Topics.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\libs\TimingWheelScheduler\src\TimingWheelScheduler.fsproj" />
   </ItemGroup>
 </Project>
