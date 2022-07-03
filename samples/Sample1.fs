@@ -78,6 +78,7 @@ module Sample1 =
 
   let run (ct: CancellationToken) =
     task {
+      let system = ActorSystem.withDefaults ()
       let producer = Producer.create ()
       let consumer = Consumer.create ()
 
@@ -86,7 +87,7 @@ module Sample1 =
         |= add producer (Sub.topic ">") State.none
         |= add consumer (Sub.topic ">") (State.init { Total = 0; NumberOfOps = 0 })
         |> build
-        |> run ct
+        |> run system ct
 
       groupInstance <! (Generate 1_000)
       groupInstance.Complete()

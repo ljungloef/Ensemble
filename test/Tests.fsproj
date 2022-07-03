@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="TestDoubles/Actors.fs" />
     <Compile Include="TestDoubles/Groups.fs" />
+    <Compile Include="TestDoubles/Schedulers.fs" />
     <Compile Include="RequestTests.fs" />
     <Compile Include="ActorTests.fs" />
     <Compile Include="TopicTests.fs" />

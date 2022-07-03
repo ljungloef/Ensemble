@@ -24,7 +24,7 @@ open System.Threading.Tasks
 
 /// The defintion of an actor.
 type Actor<'State, 'Msg> =
-  ('State -> IInbox<'Msg> -> IOutbox<'Msg> -> CancellationToken -> Task<ActorCompletionResult<'State>>)
+  (IActorSystem -> 'State -> IInbox<'Msg> -> IOutbox<'Msg> -> CancellationToken -> Task<ActorCompletionResult<'State>>)
 
 /// Data container used by an actor to tell the result of a run. The `StopReason` prop reveals the reason to why
 /// the actor stopped processing.
@@ -65,6 +65,7 @@ type ActorMessageFunc<'State, 'Msg> = 'State -> 'Msg -> (ActorMessageContext<'St
 and ActorMessageContext<'State, 'Msg>(state: 'State, handler: ActorMessageFunc<'State, 'Msg>) =
 
   let mutable output: 'Msg list = []
+  let mutable scheduledOutput: ScheduledMessage<'Msg> list = []
   let mutable stop: bool voption = ValueNone
   let mutable state = state
   let mutable handler = handler
@@ -83,6 +84,13 @@ and ActorMessageContext<'State, 'Msg>(state: 'State, handler: ActorMessageFunc<'
   member __.Output
     with get () = output
     and set (v) = update &output v ActorMessageStatus.HasOutputs
+
+  /// Add messages scheduled by the handler. These messages
+  /// will be registered in the actor system's scheduler once the handler completes.
+  /// The scheduled messages will be delivered according to the registered schedule.
+  member __.ScheduledOutput
+    with get () = scheduledOutput
+    and set (v) = update &scheduledOutput v ActorMessageStatus.HasScheduledOutputs
 
   /// Mark that the actor should be stopped after the handler completes.
   /// Set to `Some true` if the handler was aborted unexpectedly, `None` or `false` otherwise.
@@ -107,6 +115,7 @@ and ActorMessageContext<'State, 'Msg>(state: 'State, handler: ActorMessageFunc<'
   /// to reset the state of the context.
   member __.Reset() =
     output <- []
+    scheduledOutput <- []
     stop <- ValueNone
     status <- ActorMessageStatus.NoChanges
 
@@ -116,6 +125,19 @@ and [<Flags>] ActorMessageStatus =
   | HasOutputs = 0x2
   | BehaviorChange = 0x4
   | StateChange = 0x8
+  | HasScheduledOutputs = 0x16
+
+and ScheduledMessage<'Msg>(msg: 'Msg, isRecurring: bool, interval: TimeSpan) =
+
+  /// The message to be sent when the `interval` expire.
+  member val Message = msg
+
+  /// Determines if the message should be sent again.
+  member val IsRecurring = isRecurring
+
+  /// The time to wait before the message should be sent. The `Interval` is also used to determine when
+  /// the message should be sent again if it is a `IsRecurring` message.
+  member val Interval = interval
 
 type NoneState = NoneState of unit
 
@@ -150,6 +172,16 @@ module ActorMessageFuncs =
   /// Stage the message to be posted to the outbox after the handler completes.
   let inline post msg =
     fun (ctx: ActorMessageContext<_, _>) -> updateCtx ctx (fun ctx -> ctx.Output <- [ msg ])
+
+  /// Schedule a message to be posted to the outbox after the `delay` amount of time has passed.
+  let inline schedulePost msg delay =
+    fun (ctx: ActorMessageContext<_, _>) ->
+      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ ScheduledMessage(msg, false, delay) ])
+
+  /// Schedule a message to be repeatedly posted every `interval` to the outbox.
+  let inline scheduleRecurringPost msg interval =
+    fun (ctx: ActorMessageContext<_, _>) ->
+      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ ScheduledMessage(msg, true, interval) ])
 
   /// Stage all the messages to be posted to the outbox after the handler completes.
   let inline postMany (msg: seq<_>) =
@@ -252,7 +284,7 @@ module Actors =
 
     /// Create a new actor using the given `handler` as the message handler.
     let inline create handler : Actor<_, _> =
-      fun state inbox outbox ct ->
+      fun system state inbox outbox ct ->
         task {
           let mutable stagedCtx = ActorMessageContext(state, handler)
           let mutable currentCtx = stagedCtx
@@ -272,6 +304,17 @@ module Actors =
                   if stagedCtx.Status.HasFlag(ActorMessageStatus.HasOutputs) then
                     Mailbox.postAll stagedCtx.Output ct outbox
 
+                  if stagedCtx.Status.HasFlag(ActorMessageStatus.HasScheduledOutputs) then
+                    stagedCtx.ScheduledOutput
+                    |> List.map (fun sch ->
+                      { IsRecurring = sch.IsRecurring
+                        Interval = sch.Interval
+                        Post =
+                          { Message = sch.Message
+                            Outbox = outbox } })
+                    |> system.Scheduler.ScheduleDeliveries
+                    |> ignore
+
                   currentCtx <- stagedCtx
                   stagedCtx.Reset()
 
@@ -284,4 +327,4 @@ module Actors =
         }
 
     /// Run the actor using the given `state`, `inbox`, `outbox` and `ct` as parameters.
-    let inline run state inbox outbox ct (actor: Actor<_, _>) = actor state inbox outbox ct
+    let inline run system state inbox outbox ct (actor: Actor<_, _>) = actor system state inbox outbox ct

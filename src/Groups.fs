@@ -31,7 +31,7 @@ open System.Threading.Channels
 type GroupActor<'State, 'Route, 'Msg> = (GroupContext<'Route, 'Msg> -> Task<Result<'State, string>>)
 
 /// An actor group is a set of actors that work in collaboration, within the same message boundaries.
-and ActorGroup<'State, 'Route, 'Msg> = (CancellationToken -> IActorGroup<'State, 'Route, 'Msg>)
+and ActorGroup<'State, 'Route, 'Msg> = (IActorSystem -> CancellationToken -> IActorGroup<'State, 'Route, 'Msg>)
 
 /// An IActorGroup is the product of running an ActorGroup - basically, an `ActorGroup` instance.
 and IActorGroup<'State, 'Route, 'Msg> =
@@ -199,6 +199,7 @@ and GroupContext<'Route, 'Msg>
     groupMailboxAdapter: IOutbox<'Msg>,
     systemMailbox: IMailbox<GroupSystemMessages<'Msg>>,
     events: Event<ActorGroupEvent<'Route, 'Msg>>,
+    system: IActorSystem,
     actors: ResizeArray<GroupActorInstance<'Route, 'Msg>>
   ) =
 
@@ -227,6 +228,9 @@ and GroupContext<'Route, 'Msg>
 
   /// The group's event handler
   member __.Events = events
+
+  /// The actor system used by the group
+  member __.System = system
 
   /// All actor instances
   member __.Actors = actors
@@ -501,7 +505,7 @@ module ActorGroup =
         let mutable finalResult = Error "Timeout"
 
         while ctx.NotCancelled() && cont do
-          let! result = actor state actorMailbox ctx.GroupMailboxAdapter ctx.CancellationToken
+          let! result = actor ctx.System state actorMailbox ctx.GroupMailboxAdapter ctx.CancellationToken
 
           raiseActorEvent (ActorStopped result.StopReason) ctx.Events id
 
@@ -665,7 +669,7 @@ module ActorGroups =
 
   /// Build the group. The result from this is an `ActorGroup` that can be started via the `run` function.
   let inline build (definition: GroupDefinition<_, _, _>) : (ActorGroup<_, _, _>) =
-    fun ct ->
+    fun system ct ->
       let killSwitch = CancellationTokenSource.CreateLinkedTokenSource(ct)
       let router = definition.Options.Router
 
@@ -692,6 +696,7 @@ module ActorGroups =
           groupMessagesAdapter,
           systemMessages,
           groupEvents,
+          system,
           ResizeArray()
         )
 
@@ -703,4 +708,4 @@ module ActorGroups =
       new ActorGroupImpl<_, _, _>(systemCtx, completion)
 
   /// Start a new actor group run
-  let inline run (ct: CancellationToken) (group: ActorGroup<_, _, _>) = ct |> group
+  let inline run system (ct: CancellationToken) (group: ActorGroup<_, _, _>) = ct |> group system

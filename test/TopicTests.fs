@@ -240,6 +240,7 @@ module TopicTests =
     [<Fact>]
     let ``should route message to subscribers only`` () =
       task {
+        let system = ActorSystem.withDefaults ()
         let msg = $"{Guid.NewGuid():N}"
         let ct = ct ()
 
@@ -251,7 +252,7 @@ module TopicTests =
           |= add a (Sub.topic "actor.a") TestState.Default
           |= add b (Sub.topic "actor.b") TestState.Default
           |> build
-          |> run ct
+          |> run system ct
 
         groupInstance <<! ("actor.a", PostMsg msg)
         groupInstance.Complete()
@@ -268,6 +269,7 @@ module TopicTests =
     [<Fact>]
     let ``should route message to all subscribers`` () =
       task {
+        let system = ActorSystem.withDefaults ()
         let msg = $"{Guid.NewGuid():N}"
         let ct = ct ()
 
@@ -281,7 +283,7 @@ module TopicTests =
           |= add b (Sub.topic "actor.*") TestState.Default
           |= add c (Sub.topic "actor.*") TestState.Default
           |> build
-          |> run ct
+          |> run system ct
 
         groupInstance <<! ("actor.a", PostMsg msg)
         groupInstance.Complete()
@@ -299,6 +301,7 @@ module TopicTests =
     [<Fact>]
     let ``should send messages created from actor to others`` () =
       task {
+        let system = ActorSystem.withDefaults ()
         let id = Guid.NewGuid().ToString()
         let ct = ct ()
 
@@ -310,7 +313,7 @@ module TopicTests =
           |= add recorder (Sub.messages <@ PostMsg, GetState @>) TestState.Default
           |= add generator (Sub.topic "gen") TestState.Default
           |> build
-          |> run ct
+          |> run system ct
 
         groupInstance <<! ("gen", PostNewMsg(PostMsg id))
 

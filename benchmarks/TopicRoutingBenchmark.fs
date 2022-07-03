@@ -64,6 +64,7 @@ type TopicRoutingBenchmark() =
 
   let mutable tcs = Unchecked.defaultof<TaskCompletionSource<obj>>
   let mutable barrier = Unchecked.defaultof<Barrier>
+  let mutable system = Unchecked.defaultof<IActorSystem>
 
   let mutable group =
     Unchecked.defaultof<ActorGroup<Result<int64, string>, string, int64>>
@@ -95,7 +96,7 @@ type TopicRoutingBenchmark() =
   member self.IterationSetup() =
     tcs <- TaskCompletionSource<obj>()
     barrier <- new Barrier(self.ParticipantCount, (fun _ -> tcs.TrySetResult(obj ()) |> ignore))
-
+    system <- ActorSystem.withDefaults ()
     group <-
       dataset
       |> snd
@@ -107,7 +108,7 @@ type TopicRoutingBenchmark() =
   [<Benchmark>]
   member self.RunWrkVerified() =
     task {
-      use group = group |> run CancellationToken.None
+      use group = group |> run system CancellationToken.None
 
       for i in 1 .. self.MessageCount do
         group <<! ("all", i)

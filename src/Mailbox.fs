@@ -156,7 +156,7 @@ module MailboxMethods =
   let inline (<!!) (receiver: ^x) msg = postMessageAsync receiver msg
 
   /// Try to post a message using the given route to the receiver. If the post is not successful, the message will be discarded.
-  let inline (<<!) (receiver: ^x) (route, msg) =
+  let inline ( <<!) (receiver: ^x) (route, msg) =
     postMessageRouted receiver route msg |> ignore
 
   /// Try to post a message using the given route to the receiver, and return the result as a bool.

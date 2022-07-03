@@ -10,6 +10,7 @@
     <Compile Include="Requests.fs" />
     <Compile Include="Mailbox.fs" />
     <Compile Include="Channels.fs" />
+    <Compile Include="System.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Routing.fs" />
     <Compile Include="Groups.fs" />
