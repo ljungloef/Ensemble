@@ -167,8 +167,7 @@ module ActorMessageFuncs =
 
   /// Schedule a message to be posted to the outbox as instructed by the provided `delivery` instruction.
   let inline postLater delivery =
-    fun (ctx: ActorMessageContext<_, _>) ->
-      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ delivery ])
+    fun (ctx: ActorMessageContext<_, _>) -> updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ delivery ])
 
   /// Update the state to the new `state`
   let inline set state =
@@ -265,12 +264,35 @@ module Actors =
 
   module Actor =
 
+    module Context =
+
+      let inline markedWith flag (context: ActorMessageContext<_, _>) = context.Status.HasFlag(flag)
+
+      let inline is flag (context: ActorMessageContext<_, _>) = markedWith flag context
+
+      let inline whenMarked flag ([<InlineIfLambdaAttribute>] f) (context: ActorMessageContext<_, _>) =
+        if context |> markedWith flag then
+          f context
+
+    module Helpers =
+
+      let inline postOutputs outbox ct (ctx: ActorMessageContext<_, _>) = Mailbox.postAll ctx.Output ct outbox
+
+      let inline scheduleDeliveries (system: IActorSystem) outbox (ctx: ActorMessageContext<_, _>) =
+        system.Scheduler.ScheduleDeliveries(ctx.ScheduledOutput, outbox)
+
+    open type ActorMessageStatus
+    open Helpers
+
     /// Create a new actor using the given `handler` as the message handler.
     let inline create handler : Actor<_, _> =
       fun system state inbox outbox ct ->
         task {
           let mutable stagedCtx = ActorMessageContext(state, handler)
           let mutable currentCtx = stagedCtx
+
+          let postOutputs = postOutputs outbox ct
+          let scheduleDeliveries = scheduleDeliveries system outbox
 
           let! stopReason =
             readInbox
@@ -279,16 +301,13 @@ module Actors =
                 let pipe = currentCtx.Handler currentCtx.State msg
                 let _ = pipe stagedCtx
 
-                if stagedCtx.Status.HasFlag(ActorMessageStatus.MarkedStopped) then
+                if Context.is MarkedStopped stagedCtx then
                   match stagedCtx.Stop with
                   | ValueSome true -> InboxReadCmd.AbortReading
                   | _ -> InboxReadCmd.StopReading
                 else
-                  if stagedCtx.Status.HasFlag(ActorMessageStatus.HasOutputs) then
-                    Mailbox.postAll stagedCtx.Output ct outbox
-
-                  if stagedCtx.Status.HasFlag(ActorMessageStatus.HasScheduledOutputs) then
-                    system.Scheduler.ScheduleDeliveries(stagedCtx.ScheduledOutput, outbox)
+                  Context.whenMarked HasOutputs postOutputs stagedCtx
+                  Context.whenMarked HasScheduledOutputs scheduleDeliveries stagedCtx
 
                   currentCtx <- stagedCtx
                   stagedCtx.Reset()
