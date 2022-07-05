@@ -18,76 +18,12 @@
 
 namespace Ensemble
 
-open System
-open System.Threading
-
-type IMessageScheduler =
-
-  abstract member ScheduleDelivery<'Msg> : PostDeliverySchedule<'Msg> -> IScheduledDelivery
-  abstract member ScheduleDeliveries<'Msg> : PostDeliverySchedule<'Msg> seq -> IScheduledDelivery list
-
-and PostDeliverySchedule<'Msg> =
-  { Post: PostDelivery<'Msg>
-    IsRecurring: bool
-    Interval: TimeSpan }
-
-and PostDelivery<'Msg> =
-  { Message: 'Msg
-    Outbox: IOutbox<'Msg> }
-
-and IScheduledDelivery =
-
-  abstract member Cancel: unit -> unit
-
 /// The actor system acts as a plane with shared resources and
 /// functionality across groups.
 type IActorSystem =
 
   /// The message scheduler used by the system
   abstract member Scheduler: IMessageScheduler
-
-module MessageScheduler =
-
-  open TimingWheelScheduler
-
-  module Helpers =
-
-    let inline scheduleDelivery (scheduler: IScheduler) (schedule: PostDeliverySchedule<'Msg>) =
-      let runSchedule =
-        if schedule.IsRecurring then
-          RunRepeateadly schedule.Interval
-        else
-          RunOnce schedule.Interval
-
-      let timer =
-        scheduler.Schedule(
-          runSchedule,
-          schedule.Post,
-          fun state ->
-            let delivery = state :?> PostDelivery<'Msg>
-            delivery.Outbox <! delivery.Message
-        )
-
-      { new IScheduledDelivery with
-          override __.Cancel() = timer.Cancel() }
-
-  open Helpers
-
-  let inline timingWheel interval wheelSize =
-    let scheduler =
-      TimingWheelScheduler.create interval wheelSize
-      |> Scheduler.start CancellationToken.None
-
-    { new IMessageScheduler with
-
-        override __.ScheduleDelivery<'Msg>(schedule: PostDeliverySchedule<'Msg>) = scheduleDelivery scheduler schedule
-
-        override __.ScheduleDeliveries<'Msg>(schedules: PostDeliverySchedule<'Msg> seq) =
-          let map = scheduleDelivery scheduler
-          schedules |> Seq.map map |> Seq.toList }
-
-  let inline withDefaults () =
-    timingWheel (TimeSpan.FromMilliseconds(50)) 2048
 
 module ActorSystem =
 
