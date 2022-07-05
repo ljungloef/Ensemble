@@ -24,17 +24,9 @@ module Schedulers =
 
   let inline noDelayScheduler () =
     { new IMessageScheduler with
-        override __.ScheduleDelivery<'Msg>(schedule: PostDeliverySchedule<'Msg>) =
-          schedule.Post.Outbox <! schedule.Post.Message
+        override __.ScheduleDelivery<'Msg>(schedule: DeliveryInstruction<'Msg>, outbox: IOutbox<'Msg>) =
+          outbox <! schedule.Message
 
-          { new IScheduledDelivery with
-              override __.Cancel() = () }
-
-        override self.ScheduleDeliveries<'Msg>(schedules: PostDeliverySchedule<'Msg> seq) =
-          let deliveries =
-            seq {
-              for schedule in schedules do
-                yield self.ScheduleDelivery(schedule)
-            }
-
-          deliveries |> Seq.toList }
+        override __.ScheduleDeliveries<'Msg>(schedules: DeliveryInstruction<'Msg> seq, outbox: IOutbox<'Msg>) =
+          for schedule in schedules do
+            outbox <! schedule.Message }

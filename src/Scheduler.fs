@@ -23,17 +23,53 @@ open System.Threading
 
 type IMessageScheduler =
 
-  abstract member ScheduleDelivery<'Msg> : PostDeliverySchedule<'Msg> -> IScheduledDelivery
-  abstract member ScheduleDeliveries<'Msg> : PostDeliverySchedule<'Msg> seq -> IScheduledDelivery list
+  abstract member ScheduleDelivery<'Msg> : DeliveryInstruction<'Msg> * IOutbox<'Msg> -> unit
+  abstract member ScheduleDeliveries<'Msg> : DeliveryInstruction<'Msg> seq * IOutbox<'Msg> -> unit
 
-and PostDeliverySchedule<'Msg> =
-  { Post: PostDelivery<'Msg>
+and DeliveryInstruction<'Msg> =
+  {
+    /// The message to be sent when the `interval` expire.
+    Message: 'Msg
+
+    /// Determines if the message should be sent again.
     IsRecurring: bool
-    Interval: TimeSpan }
 
-and PostDelivery<'Msg> =
-  { Message: 'Msg
-    Outbox: IOutbox<'Msg> }
+    /// The time to wait before the message should be sent. The `Interval` is also used to determine when
+    /// the message should be sent again if it is a `IsRecurring` message.
+    Interval: TimeSpan
+
+    /// Cancellation token that can be used to signal if the delivery should be cancelled
+    Cancellable: CancellationToken voption }
+
+and DeliveryInstruction =
+
+  /// Create a new instruction that will trigger a delivery once the `delay` has passed.
+  static member inline Once(message, delay) =
+    { Message = message
+      IsRecurring = false
+      Interval = delay
+      Cancellable = ValueNone }
+
+  /// Create a new cancellable instruction that will trigger a delivery once the `delay` has passed.
+  static member inline Once(message, delay, canellable) =
+    { Message = message
+      IsRecurring = false
+      Interval = delay
+      Cancellable = ValueSome canellable }
+
+  /// Create a new cancellable instruction that will trigger a delivery every `interval`.
+  static member inline Recurring(message, interval, canellable) =
+    { Message = message
+      IsRecurring = true
+      Interval = interval
+      Cancellable = ValueSome canellable }
+
+  /// Create a new instruction that will trigger a delivery every `interval`.
+  static member inline Recurring(message, interval) =
+    { Message = message
+      IsRecurring = true
+      Interval = interval
+      Cancellable = ValueNone }
 
 and IScheduledDelivery =
 
@@ -45,24 +81,46 @@ module MessageScheduler =
 
   module Helpers =
 
-    let inline scheduleDelivery (scheduler: IScheduler) (schedule: PostDeliverySchedule<'Msg>) =
+    type PostDeliveryState<'Msg> =
+      { Message: 'Msg
+        Outbox: IOutbox<'Msg> }
+
+    let inline scheduleDeliveryCore
+      (scheduler: IScheduler)
+      (target: IOutbox<'Msg>)
+      (schedule: DeliveryInstruction<'Msg>)
+      =
       let runSchedule =
         if schedule.IsRecurring then
           RunRepeateadly schedule.Interval
         else
           RunOnce schedule.Interval
 
-      let timer =
-        scheduler.Schedule(
-          runSchedule,
-          schedule.Post,
-          fun state ->
-            let delivery = state :?> PostDelivery<'Msg>
-            delivery.Outbox <! delivery.Message
-        )
+      scheduler.Schedule(
+        runSchedule,
+        { Message = schedule.Message
+          Outbox = target },
+        fun state ->
+          let delivery = state :?> PostDeliveryState<'Msg>
+          delivery.Outbox <! delivery.Message
+      )
 
-      { new IScheduledDelivery with
-          override __.Cancel() = timer.Cancel() }
+    let inline scheduleDelivery scheduler target schedule =
+      match schedule.Cancellable with
+      | ValueSome token when token.IsCancellationRequested -> ()
+      | ValueSome token ->
+        let timer = scheduleDeliveryCore scheduler target schedule
+
+        token.Register(
+          (fun (state: obj) ->
+            let timer = state :?> ITimer
+            timer.Cancel()),
+          timer
+        )
+        |> ignore
+      | _ ->
+        scheduleDeliveryCore scheduler target schedule
+        |> ignore
 
   open Helpers
 
@@ -73,11 +131,12 @@ module MessageScheduler =
 
     { new IMessageScheduler with
 
-        override __.ScheduleDelivery<'Msg>(schedule: PostDeliverySchedule<'Msg>) = scheduleDelivery scheduler schedule
+        override __.ScheduleDelivery<'Msg>(schedule: DeliveryInstruction<'Msg>, target: IOutbox<'Msg>) =
+          scheduleDelivery scheduler target schedule
 
-        override __.ScheduleDeliveries<'Msg>(schedules: PostDeliverySchedule<'Msg> seq) =
-          let map = scheduleDelivery scheduler
-          schedules |> Seq.map map |> Seq.toList }
+        override __.ScheduleDeliveries<'Msg>(schedules: DeliveryInstruction<'Msg> seq, target: IOutbox<'Msg>) =
+          let iter = scheduleDelivery scheduler target
+          schedules |> Seq.iter iter }
 
   let inline withDefaults () =
     timingWheel (TimeSpan.FromMilliseconds(50)) 2048

@@ -165,7 +165,7 @@ module ActorTests =
             match m with
             // Since we use the same channel as inbox and outbox, the message will be read again by the actor when posted to the outbox on expiry
             | TestMsg "Delayed" -> set 1 <&> stop ()
-            | TestMsg "Trigger" -> schedulePost msg TimeSpan.Zero
+            | TestMsg "Trigger" -> postLater (DeliveryInstruction.Once(msg, TimeSpan.Zero))
             | TestMsg _ -> abort ())
           |> Actor.run system 0 mailbox mailbox (ct ())
 
@@ -284,7 +284,7 @@ module ActorTests =
       let msg = 33
       let delay = TimeSpan.FromSeconds(3)
 
-      let buildResult = schedulePost msg delay |> build ctx
+      let buildResult = postLater (DeliveryInstruction.Once(msg, delay)) |> build ctx
 
       buildResult |> should equal true
       ctx.ScheduledOutput.Length |> should equal 1
@@ -293,27 +293,6 @@ module ActorTests =
 
       scheduled.Interval |> should equal delay
       scheduled.IsRecurring |> should equal false
-      scheduled.Message |> should equal msg
-
-      ctx.Status
-      |> int
-      |> should equal (int ActorMessageStatus.HasScheduledOutputs)
-
-    [<Fact>]
-    let ``scheduleRecurringPost should set scheduled outputs in context`` () =
-      let ctx = context ()
-      let msg = 33
-      let delay = TimeSpan.FromSeconds(3)
-
-      let buildResult = scheduleRecurringPost msg delay |> build ctx
-
-      buildResult |> should equal true
-      ctx.ScheduledOutput.Length |> should equal 1
-
-      let scheduled = ctx.ScheduledOutput.Head
-
-      scheduled.Interval |> should equal delay
-      scheduled.IsRecurring |> should equal true
       scheduled.Message |> should equal msg
 
       ctx.Status

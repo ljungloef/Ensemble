@@ -65,7 +65,7 @@ type ActorMessageFunc<'State, 'Msg> = 'State -> 'Msg -> (ActorMessageContext<'St
 and ActorMessageContext<'State, 'Msg>(state: 'State, handler: ActorMessageFunc<'State, 'Msg>) =
 
   let mutable output: 'Msg list = []
-  let mutable scheduledOutput: ScheduledMessage<'Msg> list = []
+  let mutable scheduledOutput: DeliveryInstruction<'Msg> list = []
   let mutable stop: bool voption = ValueNone
   let mutable state = state
   let mutable handler = handler
@@ -127,18 +127,6 @@ and [<Flags>] ActorMessageStatus =
   | StateChange = 0x8
   | HasScheduledOutputs = 0x16
 
-and ScheduledMessage<'Msg>(msg: 'Msg, isRecurring: bool, interval: TimeSpan) =
-
-  /// The message to be sent when the `interval` expire.
-  member val Message = msg
-
-  /// Determines if the message should be sent again.
-  member val IsRecurring = isRecurring
-
-  /// The time to wait before the message should be sent. The `Interval` is also used to determine when
-  /// the message should be sent again if it is a `IsRecurring` message.
-  member val Interval = interval
-
 type NoneState = NoneState of unit
 
 module State =
@@ -173,19 +161,14 @@ module ActorMessageFuncs =
   let inline post msg =
     fun (ctx: ActorMessageContext<_, _>) -> updateCtx ctx (fun ctx -> ctx.Output <- [ msg ])
 
-  /// Schedule a message to be posted to the outbox after the `delay` amount of time has passed.
-  let inline schedulePost msg delay =
-    fun (ctx: ActorMessageContext<_, _>) ->
-      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ ScheduledMessage(msg, false, delay) ])
-
-  /// Schedule a message to be repeatedly posted every `interval` to the outbox.
-  let inline scheduleRecurringPost msg interval =
-    fun (ctx: ActorMessageContext<_, _>) ->
-      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ ScheduledMessage(msg, true, interval) ])
-
   /// Stage all the messages to be posted to the outbox after the handler completes.
   let inline postMany (msg: seq<_>) =
     fun (ctx: ActorMessageContext<_, _>) -> updateCtx ctx (fun ctx -> ctx.Output <- msg |> Seq.toList)
+
+  /// Schedule a message to be posted to the outbox as instructed by the provided `delivery` instruction.
+  let inline postLater delivery =
+    fun (ctx: ActorMessageContext<_, _>) ->
+      updateCtx ctx (fun ctx -> ctx.ScheduledOutput <- [ delivery ])
 
   /// Update the state to the new `state`
   let inline set state =
@@ -305,15 +288,7 @@ module Actors =
                     Mailbox.postAll stagedCtx.Output ct outbox
 
                   if stagedCtx.Status.HasFlag(ActorMessageStatus.HasScheduledOutputs) then
-                    stagedCtx.ScheduledOutput
-                    |> List.map (fun sch ->
-                      { IsRecurring = sch.IsRecurring
-                        Interval = sch.Interval
-                        Post =
-                          { Message = sch.Message
-                            Outbox = outbox } })
-                    |> system.Scheduler.ScheduleDeliveries
-                    |> ignore
+                    system.Scheduler.ScheduleDeliveries(stagedCtx.ScheduledOutput, outbox)
 
                   currentCtx <- stagedCtx
                   stagedCtx.Reset()
