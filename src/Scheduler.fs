@@ -44,28 +44,28 @@ and DeliveryInstruction<'Msg> =
 and DeliveryInstruction =
 
   /// Create a new instruction that will trigger a delivery once the `delay` has passed.
-  static member inline Once(message, delay) =
+  static member inline OnceAfter(delay, message) =
     { Message = message
       IsRecurring = false
       Interval = delay
       Cancellable = ValueNone }
 
   /// Create a new cancellable instruction that will trigger a delivery once the `delay` has passed.
-  static member inline Once(message, delay, canellable) =
+  static member inline OnceAfter(delay, message, canellable) =
     { Message = message
       IsRecurring = false
       Interval = delay
       Cancellable = ValueSome canellable }
 
   /// Create a new cancellable instruction that will trigger a delivery every `interval`.
-  static member inline Recurring(message, interval, canellable) =
+  static member inline Every(interval, message, canellable) =
     { Message = message
       IsRecurring = true
       Interval = interval
       Cancellable = ValueSome canellable }
 
   /// Create a new instruction that will trigger a delivery every `interval`.
-  static member inline Recurring(message, interval) =
+  static member inline Every(interval, message) =
     { Message = message
       IsRecurring = true
       Interval = interval

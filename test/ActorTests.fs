@@ -157,7 +157,11 @@ module ActorTests =
     let ``should post to outbox on expiry`` () =
       task {
         let msg = TestMsg "Delayed"
-        let system = Schedulers.noDelayScheduler () |> ActorSystem.create
+
+        let system =
+          Schedulers.noDelayScheduler ()
+          |> ActorSystem.create
+
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         let actor =
@@ -165,7 +169,7 @@ module ActorTests =
             match m with
             // Since we use the same channel as inbox and outbox, the message will be read again by the actor when posted to the outbox on expiry
             | TestMsg "Delayed" -> set 1 <&> stop ()
-            | TestMsg "Trigger" -> postLater (DeliveryInstruction.Once(msg, TimeSpan.Zero))
+            | TestMsg "Trigger" -> postLater (DeliveryInstruction.OnceAfter(TimeSpan.Zero, msg))
             | TestMsg _ -> abort ())
           |> Actor.run system 0 mailbox mailbox (ct ())
 
@@ -284,7 +288,9 @@ module ActorTests =
       let msg = 33
       let delay = TimeSpan.FromSeconds(3)
 
-      let buildResult = postLater (DeliveryInstruction.Once(msg, delay)) |> build ctx
+      let buildResult =
+        postLater (DeliveryInstruction.OnceAfter(delay, msg))
+        |> build ctx
 
       buildResult |> should equal true
       ctx.ScheduledOutput.Length |> should equal 1

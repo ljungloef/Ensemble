@@ -61,7 +61,7 @@ module Actors =
       function
       | PostMsg msg -> set { state with Messages = msg :: state.Messages }
       | PostNewMsg msg -> post msg
-      | SchedulePostNewMsg (msg, delay) -> postLater (DeliveryInstruction.Once(msg, delay))
+      | SchedulePostNewMsg (msg, delay) -> postLater (DeliveryInstruction.OnceAfter(delay, msg))
       | RaiseExn e -> raise e
       | Mock f -> f state
       | GetState reply ->
