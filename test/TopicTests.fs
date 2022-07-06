@@ -240,7 +240,7 @@ module TopicTests =
     [<Fact>]
     let ``should route message to subscribers only`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let msg = $"{Guid.NewGuid():N}"
         let ct = ct ()
 
@@ -269,7 +269,7 @@ module TopicTests =
     [<Fact>]
     let ``should route message to all subscribers`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let msg = $"{Guid.NewGuid():N}"
         let ct = ct ()
 
@@ -301,7 +301,7 @@ module TopicTests =
     [<Fact>]
     let ``should send messages created from actor to others`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let id = Guid.NewGuid().ToString()
         let ct = ct ()
 

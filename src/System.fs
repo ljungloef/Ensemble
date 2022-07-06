@@ -18,18 +18,50 @@
 
 namespace Ensemble
 
+open System
+open System.Threading
+
 /// The actor system acts as a plane with shared resources and
 /// functionality across groups.
 type IActorSystem =
+  inherit IDisposable
 
   /// The message scheduler used by the system
   abstract member Scheduler: IMessageScheduler
 
 module ActorSystem =
 
+  open LazyExtensions
+
+  type ActorSystemImpl(scheduler: Lazy<IMessageScheduler>) =
+
+    let mutable disposed = 0
+
+    let dispose (disposing: bool) =
+      if Interlocked.Exchange(&disposed, 1) = 0 then
+        if disposing then
+          if scheduler.IsValueCreated then
+            scheduler.Value.Dispose()
+
+    let throwIfDisposed () =
+      if disposed > 0 then
+        raise (ObjectDisposedException(nameof (ActorSystemImpl)))
+
+    interface IActorSystem with
+
+      override __.Scheduler =
+        throwIfDisposed ()
+        scheduler.Value
+
+      override self.Dispose() =
+        dispose true
+        GC.SuppressFinalize(self)
+
+    override __.Finalize() = dispose false
+
   let inline create scheduler =
-    { new IActorSystem with
-        override __.Scheduler = scheduler }
+    let scheduler = Lazy<_>.Create (scheduler)
+    new ActorSystemImpl(scheduler) :> IActorSystem
 
   let inline withDefaults () =
     MessageScheduler.withDefaults () |> create

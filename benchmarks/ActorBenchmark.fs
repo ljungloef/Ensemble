@@ -104,7 +104,7 @@ module WrkActor =
     | _ -> success ()
 
   let run n f token =
-    let system = ActorSystem.withDefaults ()
+    use system = ActorSystem.withDefaults ()
     let mailbox =
       UnboundedChannelOptions(SingleWriter = true, SingleReader = true)
       |> ChannelMailbox.fromOpts

@@ -23,10 +23,13 @@ open Ensemble
 module Schedulers =
 
   let inline noDelayScheduler () =
-    { new IMessageScheduler with
-        override __.ScheduleDelivery<'Msg>(schedule: DeliveryInstruction<'Msg>, outbox: IOutbox<'Msg>) =
-          outbox <! schedule.Message
+    fun () ->
+      { new IMessageScheduler with
+          override __.ScheduleDelivery<'Msg>(schedule: DeliveryInstruction<'Msg>, outbox: IOutbox<'Msg>) =
+            outbox <! schedule.Message
 
-        override __.ScheduleDeliveries<'Msg>(schedules: DeliveryInstruction<'Msg> seq, outbox: IOutbox<'Msg>) =
-          for schedule in schedules do
-            outbox <! schedule.Message }
+          override __.ScheduleDeliveries<'Msg>(schedules: DeliveryInstruction<'Msg> seq, outbox: IOutbox<'Msg>) =
+            for schedule in schedules do
+              outbox <! schedule.Message
+
+          override __.Dispose() = () }

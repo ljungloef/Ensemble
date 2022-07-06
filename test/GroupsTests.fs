@@ -121,7 +121,7 @@ module GroupsTests =
     task {
       let expected = expected.Split(';') |> Array.toList
 
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
       let options = GroupOpts(Routers.publishToAll (), Supervision.singleton strat)
       let actor = TestActor.create ()
 
@@ -150,7 +150,7 @@ module GroupsTests =
   let ``should not restart actor for stop-negative decisions`` (strat: SupervisionDecision) =
     task {
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
       let options = GroupOpts(Routers.publishToAll (), Supervision.singleton strat)
       let actor = TestActor.create ()
 
@@ -187,7 +187,7 @@ module GroupsTests =
     task {
       let expected = expected.Split(';') |> Array.toList
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
       let options = GroupOpts(Routers.publishToAll (), Supervision.singleton strat)
       let actor = TestActor.create ()
 
@@ -218,7 +218,7 @@ module GroupsTests =
   [<Fact>]
   let ``should publish removed messages as dead letters`` () =
     task {
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
       let ct = ct ()
 
       let options =
@@ -256,7 +256,7 @@ module GroupsTests =
     task {
       let ct = ct ()
 
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
 
       let options =
         GroupOpts(Routers.publishToAll (), Supervision.singleton SupervisionDecision.AlwaysRestart)
@@ -312,7 +312,7 @@ module GroupsTests =
   let ``should publish message as dead letter when a generated message is not picked up by any actor`` () =
     task {
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
 
       let options =
         GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
@@ -345,7 +345,7 @@ module GroupsTests =
   let ``should publish message as dead letter when a published message is not picked up by any actor`` () =
     task {
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
 
       let options =
         GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
@@ -378,7 +378,7 @@ module GroupsTests =
   let ``should publish message as dead letter when an actors mailbox is full`` () =
     task {
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
 
       let options =
         GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
@@ -415,7 +415,7 @@ module GroupsTests =
   let ``should combine results from actors when completed`` () =
     task {
       let ct = ct ()
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
 
       let groupOptions =
         GroupOpts(
@@ -461,8 +461,8 @@ module GroupsTests =
       let keyword = "Fire"
       use msgHandle = new ManualResetEventSlim(false)
 
-      let system =
-        MessageScheduler.timingWheel (TimeSpan.FromMilliseconds(5)) 8
+      use system =
+        MessageScheduler.TimingWheel.create (TimeSpan.FromMilliseconds(5)) 8
         |> ActorSystem.create
 
       let groupOptions = GroupOpts(Routers.topic ())

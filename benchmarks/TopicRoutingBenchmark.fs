@@ -103,7 +103,9 @@ type TopicRoutingBenchmark() =
       |> Group.createGroup barrier self.MessageCount
 
   [<IterationCleanup>]
-  member __.IterationCleanup() = barrier.Dispose()
+  member __.IterationCleanup() =
+    barrier.Dispose()
+    system.Dispose()
 
   [<Benchmark>]
   member self.RunWrkVerified() =

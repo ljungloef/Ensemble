@@ -78,7 +78,7 @@ module Sample1 =
 
   let run (ct: CancellationToken) =
     task {
-      let system = ActorSystem.withDefaults ()
+      use system = ActorSystem.withDefaults ()
       let producer = Producer.create ()
       let consumer = Consumer.create ()
 

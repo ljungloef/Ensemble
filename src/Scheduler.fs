@@ -22,6 +22,7 @@ open System
 open System.Threading
 
 type IMessageScheduler =
+  inherit IDisposable
 
   abstract member ScheduleDelivery<'Msg> : DeliveryInstruction<'Msg> * IOutbox<'Msg> -> unit
   abstract member ScheduleDeliveries<'Msg> : DeliveryInstruction<'Msg> seq * IOutbox<'Msg> -> unit
@@ -77,9 +78,9 @@ and IScheduledDelivery =
 
 module MessageScheduler =
 
-  open TimingWheelScheduler
+  module TimingWheel =
 
-  module Helpers =
+    open TimingWheelScheduler
 
     type PostDeliveryState<'Msg> =
       { Message: 'Msg
@@ -122,21 +123,42 @@ module MessageScheduler =
         scheduleDeliveryCore scheduler target schedule
         |> ignore
 
-  open Helpers
+    type TimingWheelSchedulerAdapter(scheduler: IScheduler) =
 
-  let inline timingWheel interval wheelSize =
-    let scheduler =
-      TimingWheelScheduler.create interval wheelSize
-      |> Scheduler.start CancellationToken.None
+      let mutable disposed = 0
 
-    { new IMessageScheduler with
+      let dispose (disposing: bool) =
+        if Interlocked.Exchange(&disposed, 1) = 0 then
+          if disposing then scheduler.Dispose()
+
+      let throwIfDisposed () =
+        if disposed > 0 then
+          raise (ObjectDisposedException(nameof (TimingWheelSchedulerAdapter)))
+
+      interface IMessageScheduler with
 
         override __.ScheduleDelivery<'Msg>(schedule: DeliveryInstruction<'Msg>, target: IOutbox<'Msg>) =
+          throwIfDisposed ()
           scheduleDelivery scheduler target schedule
 
         override __.ScheduleDeliveries<'Msg>(schedules: DeliveryInstruction<'Msg> seq, target: IOutbox<'Msg>) =
+          throwIfDisposed ()
           let iter = scheduleDelivery scheduler target
-          schedules |> Seq.iter iter }
+          schedules |> Seq.iter iter
+
+        override self.Dispose() =
+          dispose true
+          GC.SuppressFinalize(self)
+
+      override __.Finalize() = dispose false
+
+    let inline create interval wheelSize =
+      fun () ->
+        let scheduler =
+          TimingWheelScheduler.create interval wheelSize
+          |> Scheduler.start CancellationToken.None
+
+        new TimingWheelSchedulerAdapter(scheduler) :> IMessageScheduler
 
   let inline withDefaults () =
-    timingWheel (TimeSpan.FromMilliseconds(50)) 2048
+    TimingWheel.create (TimeSpan.FromMilliseconds(50)) 2048

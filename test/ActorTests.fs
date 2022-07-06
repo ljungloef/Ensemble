@@ -42,7 +42,7 @@ module ActorTests =
     [<Fact>]
     let ``should complete when mailbox is marked completed`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -62,7 +62,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return throwned exception`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -77,7 +77,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop when actor report back stop command`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
         do! mailbox <!! TestMsg "A"
 
@@ -92,7 +92,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and discard state changes when actor report back abort command`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -115,7 +115,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return cancelled reason when cancelled from outside`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let cts = new CancellationTokenSource()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
@@ -134,7 +134,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return cancelled reason when cancelled exn thrown from handler`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -158,7 +158,7 @@ module ActorTests =
       task {
         let msg = TestMsg "Delayed"
 
-        let system =
+        use system =
           Schedulers.noDelayScheduler ()
           |> ActorSystem.create
 
@@ -205,7 +205,7 @@ module ActorTests =
     [<Fact>]
     let ``should switch behaviour if actor returns become`` () =
       task {
-        let system = ActorSystem.withDefaults ()
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         let actor =
