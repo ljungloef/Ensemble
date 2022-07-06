@@ -22,6 +22,7 @@ open Xunit
 open FsUnit.Xunit
 open Ensemble
 open Ensemble.Actors
+open Ensemble.Tests.TestDoubles
 open FsUnit.CustomMatchers
 open System
 open System.Threading
@@ -41,6 +42,7 @@ module ActorTests =
     [<Fact>]
     let ``should complete when mailbox is marked completed`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -51,7 +53,7 @@ module ActorTests =
 
         let! result =
           Actor.create (fun state (TestMsg msg) -> set { state with Messages = msg :: state.Messages })
-          |> Actor.run { Messages = [] } mailbox mailbox (ct ())
+          |> Actor.run system { Messages = [] } mailbox mailbox (ct ())
 
         result.State.Messages
         |> should matchList [ "A"; "B"; "C" ]
@@ -60,13 +62,14 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return throwned exception`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
 
         let! result =
           Actor.create (fun _ (TestMsg msg) -> raise (Exception(msg)))
-          |> Actor.run { Messages = [] } mailbox mailbox (ct ())
+          |> Actor.run system { Messages = [] } mailbox mailbox (ct ())
 
         result.StopReason |> should be (ofCase <@ Exn @>)
       }
@@ -74,12 +77,13 @@ module ActorTests =
     [<Fact>]
     let ``should stop when actor report back stop command`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
         do! mailbox <!! TestMsg "A"
 
         let! result =
           Actor.create (fun _ (TestMsg _) -> stop ())
-          |> Actor.run { Messages = [] } mailbox mailbox (ct ())
+          |> Actor.run system { Messages = [] } mailbox mailbox (ct ())
 
         result.StopReason
         |> should be (ofCase <@ Stopped @>)
@@ -88,6 +92,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and discard state changes when actor report back abort command`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -99,7 +104,7 @@ module ActorTests =
               set { state with Messages = msg :: state.Messages }
             else
               abort ())
-          |> Actor.run { Messages = [] } mailbox mailbox (ct ())
+          |> Actor.run system { Messages = [] } mailbox mailbox (ct ())
 
         result.StopReason
         |> should be (ofCase <@ Aborted @>)
@@ -110,12 +115,13 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return cancelled reason when cancelled from outside`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let cts = new CancellationTokenSource()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         let task =
           Actor.create (fun _ _ -> success ())
-          |> Actor.run { Messages = [] } mailbox mailbox cts.Token
+          |> Actor.run system { Messages = [] } mailbox mailbox cts.Token
 
         cts.Cancel()
 
@@ -128,6 +134,7 @@ module ActorTests =
     [<Fact>]
     let ``should stop and return cancelled reason when cancelled exn thrown from handler`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         do! mailbox <!! TestMsg "A"
@@ -138,12 +145,41 @@ module ActorTests =
             inner.Cancel()
             inner.Token.ThrowIfCancellationRequested()
             success ())
-          |> Actor.run { Messages = [] } mailbox mailbox (ct ())
+          |> Actor.run system { Messages = [] } mailbox mailbox (ct ())
 
         result.StopReason
         |> should be (ofCase <@ Cancelled @>)
       }
 
+  module ScheduleTests =
+
+    [<Fact>]
+    let ``should post to outbox on expiry`` () =
+      task {
+        let msg = TestMsg "Delayed"
+
+        use system =
+          Schedulers.noDelayScheduler ()
+          |> ActorSystem.create
+
+        let mailbox = Channel.unbounded () |> ChannelMailbox.create
+
+        let actor =
+          Actor.create (fun _ m ->
+            match m with
+            // Since we use the same channel as inbox and outbox, the message will be read again by the actor when posted to the outbox on expiry
+            | TestMsg "Delayed" -> set 1 <&> stop ()
+            | TestMsg "Trigger" -> postLater (DeliveryInstruction.OnceAfter(TimeSpan.Zero, msg))
+            | TestMsg _ -> abort ())
+          |> Actor.run system 0 mailbox mailbox (ct ())
+
+        do! mailbox <!! TestMsg "Trigger"
+
+        let! result = actor
+
+        result.StopReason |> should equal Stopped
+        result.State |> should equal 1
+      }
 
   module BehaviorTests =
 
@@ -169,11 +205,13 @@ module ActorTests =
     [<Fact>]
     let ``should switch behaviour if actor returns become`` () =
       task {
+        use system = ActorSystem.withDefaults ()
         let mailbox = Channel.unbounded () |> ChannelMailbox.create
 
         let actor =
           Actor.create behaviorA
           |> Actor.run
+               system
                { BehaviorA = 0
                  BehaviorB = 0
                  Messages = [] }
@@ -243,6 +281,29 @@ module ActorTests =
       ctx.Status
       |> int
       |> should equal (int ActorMessageStatus.HasOutputs)
+
+    [<Fact>]
+    let ``schedulePost should set scheduled outputs in context`` () =
+      let ctx = context ()
+      let msg = 33
+      let delay = TimeSpan.FromSeconds(3)
+
+      let buildResult =
+        postLater (DeliveryInstruction.OnceAfter(delay, msg))
+        |> build ctx
+
+      buildResult |> should equal true
+      ctx.ScheduledOutput.Length |> should equal 1
+
+      let scheduled = ctx.ScheduledOutput.Head
+
+      scheduled.Interval |> should equal delay
+      scheduled.IsRecurring |> should equal false
+      scheduled.Message |> should equal msg
+
+      ctx.Status
+      |> int
+      |> should equal (int ActorMessageStatus.HasScheduledOutputs)
 
     [<Fact>]
     let ``set should set state in context`` () =

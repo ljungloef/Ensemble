@@ -20,6 +20,7 @@ namespace Ensemble.Tests.TestDoubles
 
 open Ensemble
 open Ensemble.Actors
+open System
 open System.Threading
 
 module Actors =
@@ -31,6 +32,7 @@ module Actors =
   type TestMsg =
     | PostMsg of string
     | PostNewMsg of TestMsg
+    | SchedulePostNewMsg of TestMsg * TimeSpan
     | RaiseExn of exn
     | Mock of (TestState -> (ActorMessageContext<TestState, TestMsg> -> bool))
     | GetState of Request<TestState>
@@ -59,6 +61,7 @@ module Actors =
       function
       | PostMsg msg -> set { state with Messages = msg :: state.Messages }
       | PostNewMsg msg -> post msg
+      | SchedulePostNewMsg (msg, delay) -> postLater (DeliveryInstruction.OnceAfter(delay, msg))
       | RaiseExn e -> raise e
       | Mock f -> f state
       | GetState reply ->

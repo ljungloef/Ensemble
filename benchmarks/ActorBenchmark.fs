@@ -104,12 +104,13 @@ module WrkActor =
     | _ -> success ()
 
   let run n f token =
+    use system = ActorSystem.withDefaults ()
     let mailbox =
       UnboundedChannelOptions(SingleWriter = true, SingleReader = true)
       |> ChannelMailbox.fromOpts
 
     let actorDef = Actor.create (handler f)
-    let task = actorDef |> Actor.run 0L mailbox mailbox token
+    let task = actorDef |> Actor.run system 0L mailbox mailbox token
 
     for i in 0L .. n do
       mailbox <! Increment i

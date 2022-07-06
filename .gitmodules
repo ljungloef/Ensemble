@@ -1,0 +1,3 @@
+[submodule "TimingWheelScheduler"]
+	path = libs/TimingWheelScheduler
+	url = git@github.com:ljungloef/TimingWheelScheduler-dotnet.git
