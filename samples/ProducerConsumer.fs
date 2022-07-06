@@ -25,7 +25,7 @@ open Ensemble
 open Ensemble.Actors
 open Ensemble.Topics
 
-module Sample1 =
+module ProducerConsumer =
 
   type Msg =
     | Generate of int
@@ -38,6 +38,7 @@ module Sample1 =
     let handler _ =
       function
       | Generate amount ->
+        printfn "Generating %i commands" amount
 
         let rng = new Random()
         let inline inc () = rng.NextDouble() > 0.5
@@ -53,6 +54,7 @@ module Sample1 =
     type State = { Total: int; NumberOfOps: int }
 
     let inline apply op amount state =
+      printfn "a"
       set
         { state with
             Total = op state.Total amount
@@ -78,66 +80,27 @@ module Sample1 =
 
   let run (ct: CancellationToken) =
     task {
+      printfn "Starting producer consumer sample.."
+
       use system = ActorSystem.withDefaults ()
       let producer = Producer.create ()
       let consumer = Consumer.create ()
 
       use groupInstance =
         groupWith (Routers.topic ())
-        |= add producer (Sub.topic ">") State.none
         |= add consumer (Sub.topic ">") (State.init { Total = 0; NumberOfOps = 0 })
+        |. add producer (Sub.topic ">") State.none
         |> build
         |> run system ct
 
       groupInstance <! (Generate 1_000)
       groupInstance.Complete()
 
-      return! groupInstance.Completion
+      let! result = groupInstance.Completion
+
+      match result with
+      | Ok finalState -> printfn $"Result is %A{finalState}"
+      | Error e -> printfn $"Error when running sample: %A{e}"
+
+      return ()
     }
-
-module Sample2 =
-
-  [<Struct>]
-  type Msg =
-    | Connect
-    | Ping
-    | Pong
-    | Disconnect
-    | LastWill of string
-
-  module Domain =
-
-    type State =
-      { ConnectTime: DateTimeOffset option
-        LastPingSent: DateTimeOffset option
-        LastPingTime: DateTimeOffset option
-        DisconnectTime: DateTimeOffset option }
-
-    let rec disconnected state =
-      function
-      | Connect ->
-        become connected
-        <&> set { state with ConnectTime = Some DateTimeOffset.UtcNow }
-      | _ -> success ()
-
-    and connected state =
-      function
-      | Ping ->
-        post Pong
-        <&> set { state with LastPingSent = Some DateTimeOffset.UtcNow }
-      | Pong -> set { state with LastPingTime = Some DateTimeOffset.UtcNow }
-      | Disconnect ->
-        become disconnected
-        <&> post (LastWill "bye")
-        <&> set state
-      | _ -> success ()
-
-
-    let create () =
-      let state () =
-        { ConnectTime = None
-          LastPingSent = None
-          LastPingTime = None
-          DisconnectTime = None }
-
-      Actor.create disconnected

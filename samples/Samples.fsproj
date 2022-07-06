@@ -4,9 +4,13 @@
     <LangVersion>6.0</LangVersion>
     <RootNamespace>Ensemble.Samples</RootNamespace>
     <AssemblyName>Ensemble.Samples</AssemblyName>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Sample1.fs" />
+    <Compile Include="ProducerConsumer.fs" />
+    <Compile Include="SwitchableBehavior.fs" />
+    <Compile Include="MessageScheduling.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\Ensemble.fsproj" />
