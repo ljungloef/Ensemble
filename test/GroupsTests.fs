@@ -114,6 +114,24 @@ module GroupsTests =
       return deadLetters |> Seq.toList
     }
 
+  [<Fact>]
+  let ``RestartUnlessStopped mask should include completion and failure`` () =
+    let mask = SupervisionDecision.RestartUnlessStopped
+
+    mask.HasFlag(SupervisionDecision.RestartOnCompletion) |> should equal true
+    mask.HasFlag(SupervisionDecision.RestartOnFailure) |> should equal true
+    mask.HasFlag(SupervisionDecision.RestartWhenAborted) |> should equal false
+    mask.HasFlag(SupervisionDecision.RestartWhenStopped) |> should equal false
+
+  [<Fact>]
+  let ``AlwaysRestart mask should include all states`` () =
+    let mask = SupervisionDecision.AlwaysRestart
+
+    mask.HasFlag(SupervisionDecision.RestartOnCompletion) |> should equal true
+    mask.HasFlag(SupervisionDecision.RestartOnFailure) |> should equal true
+    mask.HasFlag(SupervisionDecision.RestartWhenAborted) |> should equal true
+    mask.HasFlag(SupervisionDecision.RestartWhenStopped) |> should equal true
+
   [<Theory>]
   [<InlineData(AlwaysRestartAndKeepOnlyMailbox, "B;C")>]
   [<InlineData(AlwaysRestartAndKeepStateAndMailbox, "A;B;C")>]
@@ -174,7 +192,6 @@ module GroupsTests =
       let! deadLetters = waitForDeadletters
       deadLetters |> should matchList [ "B"; "C" ]
     }
-
 
   [<Theory>]
   [<InlineData(RestartOnFailureAndKeepOnlyMailbox, "B;C")>]
@@ -315,7 +332,7 @@ module GroupsTests =
       use system = ActorSystem.withDefaults ()
 
       let options =
-        GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
+        GroupOpts(Routers.publishToAll (), RestartOnFailureAndKeepMailboxIntactStrategy.Instance)
 
       let actor = TestActor.create ()
 
@@ -348,7 +365,7 @@ module GroupsTests =
       use system = ActorSystem.withDefaults ()
 
       let options =
-        GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
+        GroupOpts(Routers.publishToAll (), RestartOnFailureAndKeepMailboxIntactStrategy.Instance)
 
       let actor = TestActor.create ()
 
@@ -381,7 +398,7 @@ module GroupsTests =
       use system = ActorSystem.withDefaults ()
 
       let options =
-        GroupOpts(Routers.publishToAll (), RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance)
+        GroupOpts(Routers.publishToAll (), RestartOnFailureAndKeepMailboxIntactStrategy.Instance)
 
       let actor = TestActor.create ()
 
@@ -496,4 +513,39 @@ module GroupsTests =
       match result with
       | Error e -> failwith e
       | Ok state -> state |> should equal 1
+    }
+
+  [<Fact>]
+  let ``should complete when all actors are stopped`` () =
+    task {
+      let ct = ct ()
+      use system = ActorSystem.withDefaults ()
+
+      let groupOptions =
+        GroupOpts(
+          Routers.publishToAll (),
+          Supervision.singleton (
+            SupervisionDecision.NeverRestart
+            ||| SupervisionDecision.KeepMailboxIntact
+          )
+        )
+
+      let a1 = TestActor.create ()
+      let a2 = TestActor.create ()
+
+      use groupInstance =
+        defineGroup groupOptions
+        |= add a1 (Sub.topic "a1") TestState.Default
+        |= add a2 (Sub.topic "a2") TestState.Default
+        |> build
+        |> run system ct
+
+      groupInstance <<! ("a1", Stop)
+      groupInstance <<! ("a2", Stop)
+
+      let! result = groupInstance.Completion
+
+      match result with
+      | Error _ -> ()
+      | Ok (resultA, resultB) -> failwith "should not be ok"
     }

@@ -36,6 +36,7 @@ module Actors =
     | RaiseExn of exn
     | Mock of (TestState -> (ActorMessageContext<TestState, TestMsg> -> bool))
     | GetState of Request<TestState>
+    | Stop
 
   module Mocks =
 
@@ -64,6 +65,7 @@ module Actors =
       | SchedulePostNewMsg (msg, delay) -> postLater (DeliveryInstruction.OnceAfter(delay, msg))
       | RaiseExn e -> raise e
       | Mock f -> f state
+      | Stop -> stop ()
       | GetState reply ->
         reply |> Request.respond state |> ignore
         success ()
