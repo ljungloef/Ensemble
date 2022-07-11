@@ -54,7 +54,6 @@ module ProducerConsumer =
     type State = { Total: int; NumberOfOps: int }
 
     let inline apply op amount state =
-      printfn "a"
       set
         { state with
             Total = op state.Total amount

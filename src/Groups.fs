@@ -103,22 +103,25 @@ and ISupervisionStrategy =
   abstract member Decide: unit -> SupervisionDecision
 
 and [<Flags>] SupervisionDecision =
-  | AlwaysRestart = 0x1
+  | NeverRestart = 0x0
+  | RestartOnCompletion = 0x1
   | RestartOnFailure = 0x2
-  | RestartUnlessStopped = 0x4
-  | NeverRestart = 0x8
+  | RestartUnlessStopped = 0x3
+  | RestartWhenStopped = 0x4
+  | RestartWhenAborted = 0x8
+  | AlwaysRestart = 0xF
 
   /// ---
   | KeepState = 0x0100
   | KeepMailboxIntact = 0x0200
 
-and RestartUnlessStoppedAndKeepMailboxIntactStrategy() =
+and RestartOnFailureAndKeepMailboxIntactStrategy() =
   interface ISupervisionStrategy with
     override __.Decide() =
-      SupervisionDecision.RestartUnlessStopped
+      SupervisionDecision.RestartOnFailure
       ||| SupervisionDecision.KeepMailboxIntact
   with
-    static member Instance = RestartUnlessStoppedAndKeepMailboxIntactStrategy()
+    static member Instance = RestartOnFailureAndKeepMailboxIntactStrategy()
 
 /// Options used to configure an actor group.
 and GroupOpts<'Route, 'Msg>
@@ -135,7 +138,7 @@ and GroupOpts<'Route, 'Msg>
 
   /// The supervision strategy that should be used. Optional, defaults to `RestartUnlessStoppedAndKeepMailboxIntactStrategy`
   member val FallbackSupervisionStrategy =
-    defaultArg fallbackSupervisionStrat RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance with get, set
+    defaultArg fallbackSupervisionStrat RestartOnFailureAndKeepMailboxIntactStrategy.Instance with get, set
 
   /// The upper time limit of group teardown. Optional, defaults to 10s
   member val MaxTeardownTime = defaultArg maxTeardownTime (TimeSpan.FromSeconds(10)) with get, set
@@ -332,9 +335,9 @@ module Supervision =
     { new ISupervisionStrategy with
         override __.Decide() = decision }
 
-  /// Get a reference to the default strategy (`RestartUnlessStoppedAndKeepMailboxIntactStrategy`)
+  /// Get a reference to the default strategy (`RestartOnFailureAndKeepMailboxIntactStrategy`)
   let inline defaultStrategy () =
-    RestartUnlessStoppedAndKeepMailboxIntactStrategy.Instance
+    RestartOnFailureAndKeepMailboxIntactStrategy.Instance
 
 module ActorGroup =
 
@@ -514,10 +517,10 @@ module ActorGroup =
           cont <-
             match result.StopReason with
             | Cancelled -> false
-            | Exn _ -> true
-            | Complete -> decision.HasFlag(SupervisionDecision.AlwaysRestart)
-            | Stopped
-            | Aborted -> not (decision.HasFlag(SupervisionDecision.RestartUnlessStopped))
+            | Exn _ -> decision.HasFlag(SupervisionDecision.RestartOnFailure)
+            | Complete -> decision.HasFlag(SupervisionDecision.RestartOnCompletion)
+            | Stopped -> decision.HasFlag(SupervisionDecision.RestartWhenStopped)
+            | Aborted -> decision.HasFlag(SupervisionDecision.RestartWhenAborted)
 
           if cont then
             state <-
