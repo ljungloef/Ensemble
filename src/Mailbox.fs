@@ -161,7 +161,7 @@ module MailboxMethods =
 
   /// Try to post a message using the given route to the receiver, and return the result as a bool.
   let inline (<<!?) (receiver: ^x) (route, msg) =
-    postMessageRouted receiver route msg |> ignore
+    postMessageRouted receiver route msg
 
   /// Try to post a message the receiver, using the given route, until it succeeds. Returns a ValueTask that completes when the operation is successful.
   let inline (<<!!) (receiver: ^x) (route, msg) = postMessageRouted receiver route msg
