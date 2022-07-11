@@ -20,6 +20,7 @@ namespace Ensemble.Samples
 
 open System
 open System.Threading
+open System.Threading.Tasks
 
 open Ensemble
 open Ensemble.Actors
@@ -27,7 +28,6 @@ open Ensemble.Topics
 
 module SwitchableBehavior =
 
-  [<Struct>]
   type Msg =
     | Connect
     | Ping
@@ -35,39 +35,83 @@ module SwitchableBehavior =
     | Disconnect
     | LastWill of string
 
-  module Domain =
+  type AppState =
+    { ConnectTime: DateTimeOffset option
+      LastPingSent: DateTimeOffset option
+      LastPingTime: DateTimeOffset option
+      DisconnectTime: DateTimeOffset option }
+    static member Default() =
+      { ConnectTime = None
+        LastPingSent = None
+        LastPingTime = None
+        DisconnectTime = None }
 
-    type State =
-      { ConnectTime: DateTimeOffset option
-        LastPingSent: DateTimeOffset option
-        LastPingTime: DateTimeOffset option
-        DisconnectTime: DateTimeOffset option }
+  let rec disconnected state =
+    function
+    | Connect ->
 
-    let rec disconnected state =
-      function
-      | Connect ->
-        become connected
-        <&> set { state with ConnectTime = Some DateTimeOffset.UtcNow }
-      | _ -> success ()
+      printfn "Received connect message"
 
-    and connected state =
-      function
-      | Ping ->
-        post Pong
-        <&> set { state with LastPingSent = Some DateTimeOffset.UtcNow }
-      | Pong -> set { state with LastPingTime = Some DateTimeOffset.UtcNow }
-      | Disconnect ->
-        become disconnected
-        <&> post (LastWill "bye")
-        <&> set state
-      | _ -> success ()
+      // Switch to another handler
+      become connected
+
+      // Update the with some additional info
+      <&> set { state with ConnectTime = Some DateTimeOffset.UtcNow }
+
+    | _ -> success ()
+
+  and connected state =
+    function
+    | Ping ->
+
+      printfn "Received ping message; responding with Pong"
+
+      post Pong
+      <&> set { state with LastPingSent = Some DateTimeOffset.UtcNow }
+
+    | Pong -> set { state with LastPingTime = Some DateTimeOffset.UtcNow }
+
+    | Disconnect ->
+
+      printfn "Received disconnect message"
+
+      become disconnected
+      <&> post (LastWill "bye")
+      <&> set { state with DisconnectTime = Some DateTimeOffset.UtcNow }
+
+    | _ -> success ()
 
 
-    let create () =
-      let state () =
-        { ConnectTime = None
-          LastPingSent = None
-          LastPingTime = None
-          DisconnectTime = None }
+  let run (ct: CancellationToken) =
+    task {
+      printfn "Starting switchable behavior sample.."
 
-      Actor.create disconnected
+      let app = Actor.create disconnected
+
+      use system = ActorSystem.withDefaults ()
+
+      use groupInstance =
+        groupWith (Routers.topic ())
+        |= add app (Sub.topic ">") AppState.Default
+        |> build
+        |> run system ct
+
+      // Simulate connect
+      groupInstance <! Connect
+
+      do! Task.Delay(1_000)
+
+      groupInstance <! Ping
+
+      do! Task.Delay(1_000)
+
+      groupInstance <! Disconnect
+
+      let! result = groupInstance.Completion
+
+      match result with
+      | Ok finalState -> printfn $"Result is %A{finalState}"
+      | Error e -> printfn $"Error when running sample: %A{e}"
+
+      return ()
+    }

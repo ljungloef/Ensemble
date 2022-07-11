@@ -22,16 +22,13 @@ open System
 open System.Threading
 open System.Threading.Tasks
 
-open Ensemble
-open Ensemble.Actors
-open Ensemble.Topics
-
 module Program =
 
   let inline runTarget (target: string) ct =
     match target.ToLowerInvariant() with
     | "ms" -> MessageScheduling.run ct
     | "pc" -> ProducerConsumer.run ct
+    | "sb" -> SwitchableBehavior.run ct
     | _ -> ProducerConsumer.run ct
 
   let inline run ct (args: string list) =

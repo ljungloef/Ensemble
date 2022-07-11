@@ -93,7 +93,7 @@ module MailboxProcessorActor =
 
     agent.PostAndReply GetResult
 
-module WrkActor =
+module EnsembleActor =
 
   let handler f state =
     function
@@ -105,12 +105,16 @@ module WrkActor =
 
   let run n f token =
     use system = ActorSystem.withDefaults ()
+
     let mailbox =
       UnboundedChannelOptions(SingleWriter = true, SingleReader = true)
       |> ChannelMailbox.fromOpts
 
     let actorDef = Actor.create (handler f)
-    let task = actorDef |> Actor.run system 0L mailbox mailbox token
+
+    let task =
+      actorDef
+      |> Actor.run system 0L mailbox mailbox token
 
     for i in 0L .. n do
       mailbox <! Increment i
@@ -136,7 +140,7 @@ type ActorBenchmark() =
   [<Params(10, 1_000, 100_000)>]
   member val public count = 0 with get, set
 
-  // [<Benchmark>]
+  [<Benchmark>]
   member self.RunChannelsVerified() =
     task {
       let! result = ChannelActor.run self.count increment CancellationToken.None
@@ -144,7 +148,7 @@ type ActorBenchmark() =
       return ()
     }
 
-  // [<Benchmark>]
+  [<Benchmark>]
   member self.RunAgentVerified() =
     let result =
       MailboxProcessorActor.run self.count incrementInt CancellationToken.None
@@ -153,9 +157,9 @@ type ActorBenchmark() =
     ()
 
   [<Benchmark>]
-  member self.RunWrkVerified() =
+  member self.RunEnsembleVerified() =
     task {
-      let! result = WrkActor.run self.count incrementInt CancellationToken.None
-      logResult "wrk" result.State
+      let! result = EnsembleActor.run self.count incrementInt CancellationToken.None
+      logResult "ensemble" result.State
       return ()
     }
